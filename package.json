@@ -1,0 +1,16 @@
+{
+    "name": "knit_decoder",
+    "version": "0.0.1",
+    "gypfile": true,
+    "main": "index.js",
+    "license": "MIT",
+    "dependencies": {
+        "async.queue": "^0.5.2",
+        "bindings": "^1.3.0",
+        "eventemitter2": "^5.0.1",
+        "nan": "^2.10.0"
+    },
+    "devDependencies": {
+        "buffer-split": "^1.0.0"
+    }
+}
