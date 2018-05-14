@@ -145,7 +145,7 @@ public:
                 Nan::New(context->frame_width),
                 Nan::New(context->frame_height),
             };
-            context->callback.Call(3, argv, async_resource);
+            context->callback.Call(4, argv, async_resource);
         } else {
             // Even if there is no decode output, we still need to call the callback
             // to inform that the async task is done.
