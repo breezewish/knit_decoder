@@ -22,30 +22,34 @@ public:
     bool init_done = false;
     bool decode_in_progress = false;
     bool pending_release = false;
-    
+
     bool pending_out_buffer_change = false; // Are there any deferred `out_buffer` change? `out_buffer` cannot be re-allocated outside v8 context.
     Nan::Callback callback;
     Nan::Persistent<Object> out_buffer_store; // Persist until release. Internal buffer may be re-allocated according to video size.
     Nan::Persistent<Object> in_buffer_store; // Persist during decoding.
-    
+
+    uint8_t *in_frame_buffer; // Single frame buffer.
+
     AVCodecContext *codec = nullptr;
     AVCodecParserContext *parser = nullptr;
-    
+
     // The buffer for codec output
     AVFrame *frame_temp = nullptr;
-    
+
     // Save latest frame size. When frame size is changed, following members will be re-allocated.
     int frame_width = -1, frame_height = -1;
     AVPixelFormat frame_pixel_format = AV_PIX_FMT_NONE;
     SwsContext *sws_context = nullptr;
     AVFrame *frame_output = nullptr;
     int frame_output_size = 0;
-    
+
     bool init() {
         if (init_done) {
             return true;
         }
-        
+
+        in_frame_buffer = new uint8_t[10 * 1024 * 1024];
+
         auto decoder = avcodec_find_decoder(AV_CODEC_ID_H264);
         if (!decoder) {
             std::cerr << "[knit_decoder] Error: Failed to find H264 decoder" << std::endl;
@@ -60,34 +64,36 @@ public:
             std::cerr << "[knit_decoder] Error: Failed to open decoder" << std::endl;
             return false;
         }
-        
+
         // configure for low delay
         codec->flags |= AV_CODEC_FLAG_LOW_DELAY;
         codec->flags2 |= AV_CODEC_FLAG2_FAST;
-        
+
         parser = av_parser_init(AV_CODEC_ID_H264);
         if (!parser) {
             std::cerr << "[knit_decoder] Error: Failed to create H264 parser" << std::endl;
             return false;
         }
-        
+
         frame_temp = av_frame_alloc();
         if (!frame_temp) {
             std::cerr << "[knit_decoder] Error: Failed to allocate decode temp frame" << std::endl;
             return false;
         }
-        
+
         init_done = true;
         return true;
     }
-    
+
     void release() {
         if (decode_in_progress) {
             pending_release = true;
             return;
         }
-        
+
         pending_release = false;
+
+        delete[] in_frame_buffer;
         if (codec != nullptr) {
             avcodec_free_context(&codec);
         }
@@ -99,14 +105,14 @@ public:
             av_frame_free(&frame_temp);
         }
         destroy_output_frame();
-        
+
         init_done = false;
     }
-    
+
     ~DecodeContext() {
         release();
     }
-    
+
     /**
      * Ensure the output frame. If size is changed, new output frame will be allocated.
      * Otherwise previous one will be reused.
@@ -121,7 +127,7 @@ public:
             return true;
         }
     }
-    
+
     /**
      * Create new output frame and associated sws contexts. Previous one will be destroyed if exists.
      */
@@ -148,10 +154,10 @@ public:
             frame_output_size = ret;
         }
         pending_out_buffer_change = true;
-        
+
         return true;
     }
-    
+
     /**
      * Destroy output frame and associated contexts if exists.
      */

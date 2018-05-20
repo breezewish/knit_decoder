@@ -1,6 +1,7 @@
 #ifndef KNIT_DECODER_WORKER
 #define KNIT_DECODER_WORKER
 
+#include <cstring>
 #include <string>
 
 #include <nan.h>
@@ -24,7 +25,6 @@ private:
     uint32_t input_length;
     bool has_decode_output = false;
 public:
-    // `input_buffer` must contain 32 byte paddings.
     DecodeWorker(DecodeContext *context,
                  Local<Object> &buffer,
                  uint32_t offset,
@@ -33,21 +33,21 @@ public:
         this->input_buffer = reinterpret_cast<uint8_t *>(node::Buffer::Data(buffer)) + offset;
         this->input_length = length;
     }
-    
+
     void Execute() {
         decode_frames();
     }
-    
+
     /**
      * Decode one or more frames.
      */
     bool decode_frames() {
         uint8_t *cur_buf = input_buffer;
         int remain_buf_size = input_length;
-        
+
         uint8_t *data = nullptr;
         int size = 0;
-        
+
         while (remain_buf_size) {
             int len = av_parser_parse2(context->parser, context->codec, &data, &size, cur_buf, remain_buf_size, 0, 0, AV_NOPTS_VALUE);
             cur_buf += len;
@@ -63,29 +63,31 @@ public:
                 }
             }
         }
-        
+
         return true;
     }
-    
+
     /**
      * Decode single frame.
      */
     bool decode_frame(uint8_t *buffer, int buffer_size) {
+        std::memcpy(context->in_frame_buffer, buffer, buffer_size);
+
         AVPacket packet;
         av_init_packet(&packet);
-        packet.data = buffer;
+        packet.data = context->in_frame_buffer;
         packet.size = buffer_size;
-        
+
         int ret;
-        
+
         has_decode_output = false;
-        
+
         ret = avcodec_send_packet(context->codec, &packet);
         if (ret != 0) {
             SetErrorMessage(std::string("Failed to decode frame: avcodec_send_packet: ").append(av_err2str(ret)).data());
             return false;
         }
-        
+
         while (true) {
             ret = avcodec_receive_frame(context->codec, context->frame_temp);
             if (ret == 0) {
@@ -112,10 +114,10 @@ public:
                 return false;
             }
         }
-        
+
         return true;
     }
-    
+
     void WorkComplete() {
         context->decode_in_progress = false;
         context->in_buffer_store.Reset();
@@ -124,7 +126,7 @@ public:
             context->release();
         }
     }
-    
+
     void HandleOKCallback() {
         Nan::HandleScope scope;
         if (has_decode_output) {
@@ -153,7 +155,7 @@ public:
             context->callback.Call(1, argv, async_resource);
         }
     }
-    
+
     void HandleErrorCallback() {
         Nan::HandleScope scope;
         Local<Value> argv[] = { Nan::New(this->ErrorMessage()).ToLocalChecked() };

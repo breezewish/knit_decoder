@@ -30,7 +30,7 @@ class Decoder extends EventEmitter {
         this._decoder.decodeFrames(task.buffer, task.offset, task.length);
     }
 
-    decodeFrames(buffer, offset, length, clearQueue = true) {
+    decodeFrames(buffer, offset, length) {
         if (!buffer instanceof Buffer) {
             throw new Error('Expect buffer');
         }
@@ -38,9 +38,6 @@ class Decoder extends EventEmitter {
         length = ~~length;
         if (offset + length > buffer.length) {
             throw new Error('Offset out of bound');
-        }
-        if (clearQueue) {
-            this._queue.kill();
         }
         this._queue.push({buffer, offset, length});
     }
